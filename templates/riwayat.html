@@ -1,0 +1,683 @@
+{% extends 'base.html' %}
+
+{% block title %}Riwayat Analisis - Analisis Sentimen BPJS{% endblock %}
+
+{% block head %}
+<style>
+  /* Kustomisasi gaya halaman riwayat */
+  .chart-container {
+    position: relative;
+    height: 240px;
+    width: 100%;
+  }
+  .table-responsive {
+    border-radius: 12px;
+    border: 1px solid var(--neutral-border);
+  }
+  .search-wrapper {
+    position: relative;
+  }
+  .search-wrapper i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+  .search-wrapper .form-control {
+    padding-left: 40px;
+    border-radius: 12px;
+  }
+  
+  /* Pagination styling */
+  .pagination {
+    margin-bottom: 0;
+    gap: 4px;
+  }
+  .pagination .page-item .page-link {
+    border: 1px solid var(--neutral-border);
+    color: var(--text-main);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .pagination .page-item.active .page-link {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+  }
+  .pagination .page-item.disabled .page-link {
+    background: var(--neutral-light);
+    border-color: var(--neutral-border);
+    color: var(--text-muted);
+  }
+  .pagination .page-item:not(.active):not(.disabled) .page-link:hover {
+    background: var(--primary-light);
+    border-color: var(--primary-border);
+    color: var(--primary-color);
+  }
+
+  .detail-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .detail-val {
+    font-size: 0.9rem;
+    color: var(--text-main);
+    font-weight: 600;
+  }
+</style>
+{% endblock %}
+
+{% block topbar_icon %}clock-history{% endblock %}
+{% block topbar_title %}Riwayat Analisis & Statistik Database{% endblock %}
+
+{% block content %}
+<!-- BARIS GRAFIK STATISTIK -->
+<div class="row g-4 mb-4">
+  <!-- Grafik Sebaran Sentimen Bulanan -->
+  <div class="col-lg-7">
+    <div class="custom-card h-100">
+      <div class="border-bottom pb-2 mb-3">
+        <h5 class="fw-bold text-dark mb-1"><i class="bi bi-bar-chart-fill text-primary me-2"></i>Sebaran Sentimen Bulanan (%)</h5>
+        <p class="text-muted small mb-0">Rasio persentase sentimen Positif vs Negatif yang tersimpan di MySQL per bulan.</p>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartBulanan"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Grafik Rata-rata Tingkat Keyakinan -->
+  <div class="col-lg-5">
+    <div class="custom-card h-100">
+      <div class="border-bottom pb-2 mb-3">
+        <h5 class="fw-bold text-dark mb-1"><i class="bi bi-graph-up text-primary me-2"></i>Tingkat Keyakinan (Confidence)</h5>
+        <p class="text-muted small mb-0">Rata-rata persentase probabilitas keyakinan model SVM dan KNN.</p>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartConfidence"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CARD TABEL RIWAYAT PREDIKSI -->
+<div class="custom-card">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 pb-3 border-bottom">
+    <div>
+      <h5 class="fw-bold text-dark mb-1">Daftar Riwayat Prediksi</h5>
+      <p class="text-muted small mb-0">Seluruh riwayat hasil klasifikasi sentimen masyarakat yang terekam secara realtime.</p>
+    </div>
+    <a href="/api/download_riwayat_pdf" class="btn btn-danger d-flex align-items-center gap-2 shadow-sm" target="_blank">
+      <i class="bi bi-file-earmark-pdf-fill"></i>
+      <span>Download PDF Riwayat</span>
+    </a>
+  </div>
+
+  <!-- Filter & Pencarian -->
+  <div class="row mb-4">
+    <div class="col-md-6 col-lg-4">
+      <div class="search-wrapper">
+        <i class="bi bi-search"></i>
+        <input type="text" id="inputSearch" class="form-control" placeholder="Cari komentar di database..." onkeyup="muatDataRiwayat(1)">
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabel Riwayat -->
+  <div class="table-container mb-4">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 15%">Tanggal</th>
+            <th style="width: 12%">Jenis</th>
+            <th style="width: 32%">Komentar / File</th>
+            <th style="width: 8%" class="text-center">Jumlah Data</th>
+            <th style="width: 10%">Hasil SVM</th>
+            <th style="width: 10%">Hasil KNN</th>
+            <th style="width: 5%">Status</th>
+            <th style="width: 8%" class="text-center">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tabel-riwayat-body">
+          <tr>
+            <td colspan="9" class="text-center py-5">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="text-muted mt-2 mb-0">Memuat data riwayat...</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div class="small fw-semibold text-muted" id="info-paginasi">Menampilkan - dari - riwayat</div>
+    <nav aria-label="Navigasi Riwayat">
+      <ul class="pagination pagination-sm" id="kontrol-paginasi">
+        <!-- Loaded dynamically -->
+      </ul>
+    </nav>
+  </div>
+</div>
+
+<!-- MODAL LIHAT DETAIL -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-labelledby="detailModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content" style="border-radius: 18px; border: none; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+      <div class="modal-header bg-light border-bottom px-4 py-3">
+        <h6 class="modal-title fw-bold text-dark" id="detailModalLabel"><i class="bi bi-info-circle-fill text-primary me-2"></i>Detail Analisis Sentimen</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4" id="modal-detail-content">
+        <!-- Loaded dynamically -->
+      </div>
+      <div class="modal-footer bg-light border-top px-4 py-2.5">
+        <button type="button" class="btn btn-secondary py-2 px-4" data-bs-dismiss="modal" style="border-radius: 12px;">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let chartBulananInstance = null;
+  let chartConfidenceInstance = null;
+  let cacheRiwayatData = []; // Untuk menyimpan data lokal agar bisa dibuka di modal detail
+
+  // Fungsi 1: Load Data Riwayat Prediksi
+  function muatDataRiwayat(page) {
+    const query = document.getElementById('inputSearch').value;
+    const tbody = document.getElementById('tabel-riwayat-body');
+
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="text-center py-5">
+          <div class="spinner-border text-primary" role="status" style="width: 2rem; height: 2rem;"></div>
+          <p class="text-muted small mt-2 mb-0">Menyelaraskan data...</p>
+        </td>
+      </tr>
+    `;
+
+    fetch(`/api/riwayat_data?page=${page}&q=${encodeURIComponent(query)}`)
+      .then(res => res.json())
+      .then(res => {
+        if(res.status === 'success') {
+          cacheRiwayatData = res.data;
+          let rows = '';
+          
+          if(res.data.length === 0) {
+            rows = `<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-inbox me-2" style="font-size: 1.5rem;"></i><br>Tidak ada data riwayat prediksi ditemukan.</td></tr>`;
+          } else {
+            // Lakukan pengelompokan (grouping) riwayat berdasarkan waktu unggah yang sama (batch CSV)
+            const grouped = groupRiwayat(res.data);
+
+            grouped.forEach((group, index) => {
+              const isGroupCSV = group.items.length > 1;
+              const timestamp = group.at;
+              
+              let badgeJenis = '';
+              let komentarVal = '';
+              let jumlahData = 0;
+              let svmText = '';
+              let knnText = '';
+              let badgeStatus = '';
+              
+              if (!isGroupCSV) {
+                // MANUAL PREDICTION (SINGLE ROW)
+                const item = group.items[0];
+                badgeJenis = `<span class="badge-soft badge-soft-primary"><i class="bi bi-pencil-square"></i> Manual</span>`;
+                komentarVal = `<div class="text-truncate" style="max-width: 260px;" title="${item.komentar}">${item.komentar}</div>`;
+                jumlahData = 1;
+                
+                const bSvm = item.prediksi_svm === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+                const bKnn = item.prediksi_knn === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+                
+                svmText = `
+                  <span class="badge-soft ${bSvm}">${item.prediksi_svm}</span>
+                  <div class="small text-muted mt-0.5" style="font-size: 10px;">Conf: ${item.confidence_svm}%</div>
+                `;
+                knnText = `
+                  <span class="badge-soft ${bKnn}">${item.prediksi_knn}</span>
+                  <div class="small text-muted mt-0.5" style="font-size: 10px;">Conf: ${item.confidence_knn}%</div>
+                `;
+                
+                badgeStatus = item.sepakat 
+                  ? `<span class="badge-soft badge-soft-success"><i class="bi bi-check-circle"></i> Sama</span>`
+                  : `<span class="badge-soft badge-soft-warning"><i class="bi bi-exclamation-triangle"></i> Beda</span>`;
+              } else {
+                // CSV PREDICTION (GROUPED ROW)
+                badgeJenis = `<span class="badge-soft badge-soft-warning"><i class="bi bi-file-earmark-bar-graph"></i> CSV</span>`;
+                komentarVal = `<div class="text-truncate fw-semibold text-primary" style="max-width: 260px;">Batch Dataset CSV #${timestamp.replace(/\s+/g, '')}</div>`;
+                jumlahData = group.items.length;
+                
+                // Hitung sebaran persentase sentimen grup
+                const svmPos = group.items.filter(x => x.prediksi_svm === 'Positif').length;
+                const knnPos = group.items.filter(x => x.prediksi_knn === 'Positif').length;
+                const svmPosPct = Math.round((svmPos / jumlahData) * 100);
+                const knnPosPct = Math.round((knnPos / jumlahData) * 100);
+                
+                svmText = `
+                  <span class="badge-soft badge-soft-primary">${svmPosPct}% Positif</span>
+                  <div class="small text-muted mt-0.5" style="font-size: 10px;">${jumlahData - svmPos} Negatif</div>
+                `;
+                knnText = `
+                  <span class="badge-soft badge-soft-primary">${knnPosPct}% Positif</span>
+                  <div class="small text-muted mt-0.5" style="font-size: 10px;">${jumlahData - knnPos} Negatif</div>
+                `;
+                
+                // Cek sinkronisasi kelompok
+                const totalSepakat = group.items.filter(x => x.sepakat).length;
+                const sepakatPct = Math.round((totalSepakat / jumlahData) * 100);
+                
+                badgeStatus = `
+                  <span class="badge-soft ${sepakatPct > 80 ? 'badge-soft-success' : 'badge-soft-warning'}">
+                    ${sepakatPct}% Sama
+                  </span>
+                `;
+              }
+
+              // ID kelompok / item tunggal untuk memicu modal detail
+              const groupIndexStr = encodeURIComponent(JSON.stringify(group.items));
+              
+              rows += `
+                <tr id="riwayat-row-${timestamp.replace(/[:\s]/g, '')}">
+                  <td class="small text-secondary font-monospace">${timestamp}</td>
+                  <td>${badgeJenis}</td>
+                  <td>${komentarVal}</td>
+                  <td class="text-center fw-bold">${jumlahData}</td>
+                  <td>${svmText}</td>
+                  <td>${knnText}</td>
+                  <td>${badgeStatus}</td>
+                  <td class="text-center">
+                    <div class="d-flex justify-content-center gap-1">
+                      <button onclick="bukaModalDetail('${groupIndexStr}', '${isGroupCSV ? 'CSV' : 'Manual'}', '${timestamp}')" class="btn btn-outline-primary py-1 px-2.5 btn-sm" style="border-radius: 8px;" title="Lihat Detail">
+                        <i class="bi bi-eye"></i> Detail
+                      </button>
+                      <button onclick="hapusRiwayatLokal('${timestamp.replace(/[:\s]/g, '')}')" class="btn btn-outline-danger py-1 px-2.5 btn-sm" style="border-radius: 8px;" title="Hapus Riwayat">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            });
+          }
+          tbody.innerHTML = rows;
+          document.getElementById('info-paginasi').innerText = `Menampilkan ${res.data.length} dari ${res.total} riwayat`;
+          buatNavigasi(res.total, page);
+        } else {
+          tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Error: ${res.pesan}</td></tr>`;
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Gagal memuat data dari server.</td></tr>`;
+      });
+  }
+
+  // Fungsi pengelompokan riwayat berdasarkan timestamp unik
+  function groupRiwayat(data) {
+    const groups = [];
+    data.forEach(item => {
+      let group = groups.find(g => g.at === item.at);
+      if (!group) {
+        group = {
+          at: item.at,
+          items: []
+        };
+        groups.push(group);
+      }
+      group.items.push(item);
+    });
+    return groups;
+  }
+
+  // Fungsi 2: Buat Navigasi Paginasi
+  function buatNavigasi(total, page) {
+    const nav = document.getElementById('kontrol-paginasi');
+    const maxPage = Math.ceil(total / 10);
+    
+    let paginationHtml = '';
+    
+    paginationHtml += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="muatDataRiwayat(${page - 1}); return false;">« Sebelumnya</a></li>`;
+    
+    let startPage = Math.max(1, page - 2);
+    let endPage = Math.min(maxPage, page + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+      paginationHtml += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" onclick="muatDataRiwayat(${i}); return false;">${i}</a></li>`;
+    }
+    
+    paginationHtml += `<li class="page-item ${page >= maxPage ? 'disabled' : ''}"><a class="page-link" href="#" onclick="muatDataRiwayat(${page + 1}); return false;">Selanjutnya »</a></li>`;
+    
+    nav.innerHTML = paginationHtml;
+  }
+
+  // Fungsi 3: Membuka Modal Detail Riwayat (Manual / CSV)
+  function bukaModalDetail(itemsStr, jenis, tanggal) {
+    const items = JSON.parse(decodeURIComponent(itemsStr));
+    const content = document.getElementById('modal-detail-content');
+    
+    if (jenis === 'Manual') {
+      const item = items[0];
+      const bSvm = item.prediksi_svm === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+      const bKnn = item.prediksi_knn === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+      
+      content.innerHTML = `
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="detail-label">Tanggal Analisis</div>
+            <div class="detail-val font-monospace">${tanggal}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-label">Jenis Prediksi</div>
+            <div class="detail-val"><span class="badge-soft badge-soft-primary"><i class="bi bi-pencil-square"></i> Manual</span></div>
+          </div>
+          
+          <div class="col-12 mt-3">
+            <div class="detail-label">Komentar</div>
+            <div class="detail-val bg-light p-3 rounded-3 font-italic fw-normal" style="font-size: 0.88rem; border-left: 4px solid var(--primary-color);">
+              "${item.komentar}"
+            </div>
+          </div>
+          
+          <div class="col-md-6 mt-3">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <div class="detail-label mb-2">Model SVM</div>
+              <span class="badge-soft ${bSvm} mb-2" style="font-size: 0.85rem;">${item.prediksi_svm}</span>
+              <div class="small text-muted font-weight-bold">Tingkat Keyakinan: <strong>${item.confidence_svm}%</strong></div>
+            </div>
+          </div>
+          <div class="col-md-6 mt-3">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <div class="detail-label mb-2">Model KNN</div>
+              <span class="badge-soft ${bKnn} mb-2" style="font-size: 0.85rem;">${item.prediksi_knn}</span>
+              <div class="small text-muted font-weight-bold">Tingkat Keyakinan: <strong>${item.confidence_knn}%</strong></div>
+            </div>
+          </div>
+          
+          <div class="col-12 mt-4 text-center">
+            <div class="detail-label mb-1">Status Sinkronisasi</div>
+            ${item.sepakat 
+              ? `<span class="badge-soft badge-soft-success py-2 px-3 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill"></i> Kedua model memberikan prediksi yang sama</span>`
+              : `<span class="badge-soft badge-soft-warning py-2 px-3 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-exclamation-triangle-fill"></i> Hasil kedua model berbeda</span>`
+            }
+          </div>
+        </div>
+      `;
+    } else {
+      // BATCH CSV
+      let tableRows = items.map((item, index) => {
+        const bSvm = item.prediksi_svm === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+        const bKnn = item.prediksi_knn === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+        return `
+          <tr>
+            <td class="fw-bold">${index + 1}</td>
+            <td><div class="text-wrap" style="max-height:80px; overflow-y:auto; font-size:12px;">${item.komentar}</div></td>
+            <td>
+              <span class="badge-soft ${bSvm}">${item.prediksi_svm}</span>
+              <div class="small text-muted" style="font-size: 10px;">Conf: ${item.confidence_svm}%</div>
+            </td>
+            <td>
+              <span class="badge-soft ${bKnn}">${item.prediksi_knn}</span>
+              <div class="small text-muted" style="font-size: 10px;">Conf: ${item.confidence_knn}%</div>
+            </td>
+            <td>${item.sepakat ? '✅ Sama' : '⚠️ Beda'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      content.innerHTML = `
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <div class="detail-label">Tanggal Unggah CSV</div>
+            <div class="detail-val font-monospace">${tanggal}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-label">Jenis Prediksi</div>
+            <div class="detail-val"><span class="badge-soft badge-soft-warning"><i class="bi bi-file-earmark-bar-graph"></i> Batch CSV</span></div>
+          </div>
+          <div class="col-12">
+            <div class="detail-label">Keterangan Batch</div>
+            <div class="detail-val text-primary">Kumpulan Data Scraping (${items.length} Komentar)</div>
+          </div>
+        </div>
+        
+        <h6 class="fw-bold text-dark mt-4 mb-2"><i class="bi bi-list-ol text-primary me-2"></i>Daftar Komentar dalam Berkas</h6>
+        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+          <table class="table table-hover table-sm mb-0">
+            <thead>
+              <tr class="bg-light">
+                <th style="width: 5%">No</th>
+                <th style="width: 55%">Komentar</th>
+                <th style="width: 15%">SVM</th>
+                <th style="width: 15%">KNN</th>
+                <th style="width: 10%">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    
+    // Tampilkan modal
+    const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+    detailModal.show();
+  }
+
+  // Fungsi 4: Hapus Riwayat secara Lokal (untuk presentasi sidang)
+  function hapusRiwayatLokal(rowId) {
+    if (confirm("Apakah Anda yakin ingin menghapus data riwayat analisis ini?")) {
+      const row = document.getElementById(`riwayat-row-${rowId}`);
+      if (row) {
+        row.style.transition = "all 0.4s ease";
+        row.style.opacity = "0";
+        row.style.transform = "translateX(-20px)";
+        setTimeout(() => {
+          row.remove();
+          alert("Data riwayat berhasil dihapus secara lokal dari antrean tampilan.");
+        }, 400);
+      }
+    }
+  }
+
+  // Fungsi 5: Memuat Grafik Statistik Bulanan (Satu Chart Sebaran)
+  function muatStatistikBulanan() {
+    fetch('/api/statistik_bulanan')
+      .then(res => res.json())
+      .then(res => {
+        if(res.status === 'success' && res.labels.length > 0) {
+          // 1. Grafik Sebaran Sentimen Bulanan
+          const ctxBulan = document.getElementById('chartBulanan').getContext('2d');
+          if (chartBulananInstance) { chartBulananInstance.destroy(); }
+          
+          chartBulananInstance = new Chart(ctxBulan, {
+            type: 'bar',
+            data: {
+              labels: res.labels,
+              datasets: [
+                { label: 'SVM Positif (%)', data: res.svm.positif, backgroundColor: 'rgba(16, 185, 129, 0.85)', borderRadius: 6, barThickness: 16 },
+                { label: 'SVM Negatif (%)', data: res.svm.negatif, backgroundColor: 'rgba(239, 68, 68, 0.85)', borderRadius: 6, barThickness: 16 },
+                { label: 'KNN Positif (%)', data: res.knn.positif, backgroundColor: 'rgba(37, 99, 235, 0.85)', borderRadius: 6, barThickness: 16 },
+                { label: 'KNN Negatif (%)', data: res.knn.negatif, backgroundColor: 'rgba(245, 158, 11, 0.85)', borderRadius: 6, barThickness: 16 }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { 
+                  position: 'bottom', 
+                  labels: { 
+                    boxWidth: 10, 
+                    usePointStyle: true,
+                    font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }
+                  } 
+                },
+                datalabels: { display: false }
+              },
+              scales: {
+                y: { 
+                  max: 100, 
+                  grid: { borderDash: [5, 5], color: '#e2e8f0' },
+                  ticks: { font: { family: 'Plus Jakarta Sans' }, callback: v => v + '%' } 
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { font: { family: 'Plus Jakarta Sans', weight: '600' } }
+                }
+              }
+            }
+          });
+        }
+      })
+      .catch(err => console.error("Gagal memuat grafik statistik bulanan:", err));
+  }
+
+  // Fungsi 6: Memuat Grafik Keyakinan Model SVM vs KNN (Bar vs Line otomatis)
+  function muatConfidenceChart() {
+    fetch('/api/confidence_chart')
+      .then(res => res.json())
+      .then(res => {
+        const ctxConf = document.getElementById('chartConfidence').getContext('2d');
+        if (chartConfidenceInstance) { chartConfidenceInstance.destroy(); }
+
+        if (!res.bulan || res.bulan.length === 0) {
+          return;
+        }
+
+        if (res.bulan.length === 1) {
+          // KONDISI 1: Hanya 1 bulan -> Tampilkan Bar Chart
+          chartConfidenceInstance = new Chart(ctxConf, {
+            type: 'bar',
+            data: {
+              labels: ['SVM', 'KNN'],
+              datasets: [{
+                data: [res.svm[0], res.knn[0]],
+                backgroundColor: ['#2563eb', '#f59e0b'],
+                borderRadius: 8,
+                barThickness: 50
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                datalabels: {
+                  display: true,
+                  anchor: 'end',
+                  align: 'top',
+                  color: '#0f172a',
+                  font: { family: 'Plus Jakarta Sans', weight: 'bold', size: 12 },
+                  formatter: function(value) { return value.toFixed(2) + "%"; }
+                }
+              },
+              scales: {
+                y: { 
+                  min: 0, 
+                  max: 100, 
+                  grid: { borderDash: [5, 5], color: '#e2e8f0' },
+                  ticks: { font: { family: 'Plus Jakarta Sans' }, callback: v => v + '%' } 
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { font: { family: 'Plus Jakarta Sans', weight: '600' } }
+                }
+              }
+            }
+          });
+        } else {
+          // KONDISI 2: Lebih dari 1 bulan -> Tampilkan Line Chart otomatis
+          chartConfidenceInstance = new Chart(ctxConf, {
+            type: 'line',
+            data: {
+              labels: res.bulan,
+              datasets: [
+                { 
+                  label: 'SVM', 
+                  data: res.svm, 
+                  borderColor: '#2563eb', 
+                  backgroundColor: 'transparent', 
+                  borderWidth: 3, 
+                  tension: 0.3,
+                  pointRadius: 4,
+                  pointHoverRadius: 6
+                },
+                { 
+                  label: 'KNN', 
+                  data: res.knn, 
+                  borderColor: '#f59e0b', 
+                  backgroundColor: 'transparent', 
+                  borderWidth: 3, 
+                  tension: 0.3,
+                  pointRadius: 4,
+                  pointHoverRadius: 6
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { 
+                  position: 'bottom', 
+                  labels: { 
+                    boxWidth: 10, 
+                    usePointStyle: true,
+                    font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }
+                  } 
+                },
+                datalabels: { display: false },
+                tooltip: {
+                  callbacks: {
+                    title: function(context) {
+                      return context[0].label;
+                    },
+                    label: function(context) {
+                      return context.dataset.label + ': ' + context.raw.toFixed(2) + '%';
+                    }
+                  }
+                }
+              },
+              scales: {
+                y: { 
+                  min: 0, 
+                  max: 100, 
+                  grid: { borderDash: [5, 5], color: '#e2e8f0' },
+                  ticks: { font: { family: 'Plus Jakarta Sans' }, callback: v => v + '%' } 
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { font: { family: 'Plus Jakarta Sans', weight: '600' } }
+                }
+              }
+            }
+          });
+        }
+      })
+      .catch(err => console.error("Gagal memuat grafik keyakinan:", err));
+  }
+
+  // Inisialisasi awal saat halaman dibuka
+  document.addEventListener("DOMContentLoaded", () => {
+    muatDataRiwayat(1);
+    muatStatistikBulanan();
+    muatConfidenceChart();
+  });
+</script>
+{% endblock %}

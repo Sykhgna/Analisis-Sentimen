@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+
+{% block title %}Dataset Penelitian - Analisis Sentimen BPJS{% endblock %}
+
+{% block head %}
+<style>
+  /* Kustomisasi gaya halaman dataset komentar */
+  .filter-card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--neutral-border);
+    box-shadow: var(--card-shadow);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .search-wrapper {
+    position: relative;
+  }
+  .search-wrapper i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+  .search-wrapper .form-control {
+    padding-left: 40px;
+    border-radius: 12px;
+  }
+  .form-select, .form-control {
+    border-radius: 12px;
+    padding: 10px 16px;
+    border: 1px solid var(--neutral-border);
+    font-size: 0.875rem;
+    transition: all 0.15s ease;
+  }
+  .form-select:focus, .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  }
+  
+  /* Pagination styling overrides */
+  .pagination {
+    margin-bottom: 0;
+    gap: 4px;
+  }
+  .pagination .page-item .page-link {
+    border: 1px solid var(--neutral-border);
+    color: var(--text-main);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .pagination .page-item.active .page-link {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+  }
+  .pagination .page-item.disabled .page-link {
+    background: var(--neutral-light);
+    border-color: var(--neutral-border);
+    color: var(--text-muted);
+  }
+  .pagination .page-item:not(.active):not(.disabled) .page-link:hover {
+    background: var(--primary-light);
+    border-color: var(--primary-border);
+    color: var(--primary-color);
+  }
+</style>
+{% endblock %}
+
+{% block topbar_icon %}database{% endblock %}
+{% block topbar_title %}Eksplorasi Dataset Penelitian{% endblock %}
+
+{% block content %}
+<!-- Card Utama -->
+<div class="filter-card">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 pb-3 border-bottom">
+    <div>
+      <h5 class="fw-bold text-dark mb-1">Dataset Komentar Masyarakat</h5>
+      <p class="text-muted small mb-0">Menampilkan database keseluruhan komentar berlabel yang digunakan dalam penelitian.</p>
+    </div>
+    <span class="badge-soft badge-soft-primary">
+      <i class="bi bi-shield-check"></i> Sumber Data Terverifikasi
+    </span>
+  </div>
+
+  <!-- Area Filter -->
+  <div class="row g-3 mb-4">
+    <!-- Input Pencarian -->
+    <div class="col-md-4">
+      <div class="search-wrapper">
+        <i class="bi bi-search"></i>
+        <input type="text" id="searchInput" class="form-control" placeholder="Cari komentar berdasarkan kata kunci..." onkeyup="muatDataKomentar(1)">
+      </div>
+    </div>
+    
+    <!-- Filter Sentimen -->
+    <div class="col-md-3">
+      <select id="filterSentiment" class="form-select" onchange="muatDataKomentar(1)">
+        <option value="">Semua Sentimen</option>
+        <option value="Positif">Positif</option>
+        <option value="Negatif">Negatif</option>
+      </select>
+    </div>
+    
+    <!-- Filter Tanggal -->
+    <div class="col-md-3">
+      <input type="date" id="filterDate" class="form-control" onchange="muatDataKomentar(1)">
+    </div>
+    
+    <!-- Tombol Reset -->
+    <div class="col-md-2">
+      <button class="btn btn-outline-secondary w-100 py-2 d-flex align-items-center justify-content-center gap-2" style="border-radius: 12px;" onclick="resetFilter()">
+        <i class="bi bi-arrow-counterclockwise"></i>
+        <span>Reset</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Container Tabel -->
+  <div class="table-container mb-4">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th style="width: 7%">No</th>
+            <th style="width: 18%">Tanggal</th>
+            <th style="width: 60%">Komentar</th>
+            <th style="width: 15%" class="text-center">Sentimen</th>
+          </tr>
+        </thead>
+        <tbody id="tabel-komentar-body">
+          <tr>
+            <td colspan="4" class="text-center py-5">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="text-muted mt-2 mb-0">Sedang memuat data...</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Kontrol Paginasi -->
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div class="small fw-semibold text-muted" id="info-paginasi">Menampilkan - dari - data</div>
+    <nav aria-label="Navigasi halaman">
+      <ul class="pagination pagination-sm" id="kontrol-paginasi">
+        <!-- Loaded dynamically -->
+      </ul>
+    </nav>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function muatDataKomentar(page) {
+    const query = document.getElementById('searchInput').value;
+    const sentiment = document.getElementById('filterSentiment').value;
+    const date = document.getElementById('filterDate').value;
+    const tbody = document.getElementById('tabel-komentar-body');
+
+    // Tampilkan spinner kecil saat loading data
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center py-5">
+          <div class="spinner-border text-primary" role="status" style="width: 2rem; height: 2rem;"></div>
+          <p class="text-muted small mt-2 mb-0">Menyinkronkan data...</p>
+        </td>
+      </tr>
+    `;
+    
+    fetch(`/api/komentar_data?page=${page}&q=${encodeURIComponent(query)}&sentiment=${encodeURIComponent(sentiment)}&date=${encodeURIComponent(date)}`)
+      .then(res => res.json())
+      .then(res => {
+        if (res.status === 'success') {
+          let rows = '';
+          
+          if (res.data.length === 0) {
+            rows = `<tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-inbox me-2" style="font-size: 1.5rem;"></i><br>Data komentar tidak ditemukan.</td></tr>`;
+          } else {
+            res.data.forEach((item, i) => {
+              const isPos = item.Sentiment === 'Positif';
+              const badgeWarna = isPos ? 'badge-soft-success' : 'badge-soft-danger';
+              const iconClass = isPos ? 'bi-hand-thumbs-up-fill' : 'bi-hand-thumbs-down-fill';
+              
+              rows += `
+                <tr>
+                  <td class="fw-bold text-secondary">${(page - 1) * 10 + i + 1}</td>
+                  <td class="text-secondary small font-monospace">${item.at}</td>
+                  <td class="text-wrap">${item.comment || item.teks || '-'}</td>
+                  <td class="text-center">
+                    <span class="badge-soft ${badgeWarna}">
+                      <i class="bi ${iconClass}"></i> ${item.Sentiment}
+                    </span>
+                  </td>
+                </tr>
+              `;
+            });
+          }
+          tbody.innerHTML = rows;
+          document.getElementById('info-paginasi').innerText = `Menampilkan ${res.data.length} dari ${res.total} data`;
+          buatNavigasi(res.total, page);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-5 text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Gagal memuat data dari server.</td></tr>`;
+      });
+  }
+
+  function buatNavigasi(total, page) {
+    const nav = document.getElementById('kontrol-paginasi');
+    const maxPage = Math.ceil(total / 10);
+    
+    let navHtml = '';
+    
+    // Previous button
+    navHtml += `
+      <li class="page-item ${page === 1 ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="muatDataKomentar(${page - 1}); return false;" aria-label="Sebelumnya">
+          <span aria-hidden="true">&laquo; Sebelumnya</span>
+        </a>
+      </li>
+    `;
+    
+    // Page list (Show active page and surroundings)
+    let start = Math.max(1, page - 2);
+    let end = Math.min(maxPage, page + 2);
+    
+    for (let i = start; i <= end; i++) {
+      navHtml += `
+        <li class="page-item ${i === page ? 'active' : ''}">
+          <a class="page-link" href="#" onclick="muatDataKomentar(${i}); return false;">${i}</a>
+        </li>
+      `;
+    }
+    
+    // Next button
+    navHtml += `
+      <li class="page-item ${page >= maxPage ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="muatDataKomentar(${page + 1}); return false;" aria-label="Selanjutnya">
+          <span aria-hidden="true">Selanjutnya &raquo;</span>
+        </a>
+      </li>
+    `;
+    
+    nav.innerHTML = navHtml;
+  }
+
+  function resetFilter() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('filterSentiment').value = '';
+    document.getElementById('filterDate').value = '';
+    muatDataKomentar(1);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => muatDataKomentar(1));
+</script>
+{% endblock %}

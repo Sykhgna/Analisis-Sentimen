@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Analisis Sentimen BPJS Kesehatan{% endblock %}</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Chart.js (Loaded in Head to support plugins/scripts in child pages) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  
+  <style>
+    :root {
+      --primary-color: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --primary-border: #bfdbfe;
+      
+      --success-color: #10b981;
+      --success-light: #ecfdf5;
+      --success-border: #a7f3d0;
+      --success-text: #065f46;
+      
+      --danger-color: #ef4444;
+      --danger-light: #fef2f2;
+      --danger-border: #fca5a5;
+      --danger-text: #991b1b;
+      
+      --warning-color: #f59e0b;
+      --warning-light: #fffbeb;
+      --warning-border: #fde68a;
+      --warning-text: #92400e;
+      
+      --neutral-color: #64748b;
+      --neutral-light: #f8fafc;
+      --neutral-border: #e2e8f0;
+      
+      --sidebar-width: 260px;
+      --topbar-height: 70px;
+      
+      --bg-global: #f8fafc;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      
+      --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+      --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg-global);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: var(--text-main);
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;
+      background: white;
+      position: fixed;
+      top: 0; 
+      left: 0;
+      z-index: 1030;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--neutral-border);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .sidebar-brand {
+      padding: 24px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--neutral-border);
+    }
+
+    .brand-icon {
+      width: 42px; 
+      height: 42px;
+      background: linear-gradient(135deg, #3b82f6 0%, var(--primary-color) 100%);
+      border-radius: 12px;
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      font-size: 1.3rem; 
+      color: white; 
+      flex-shrink: 0;
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+    }
+
+    .brand-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .brand-sub {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .sidebar-section {
+      padding: 24px 24px 8px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .sidebar-nav { 
+      list-style: none; 
+      padding: 0 16px; 
+      margin: 0; 
+    }
+
+    .sidebar-nav li { 
+      margin-bottom: 4px; 
+    }
+
+    .sidebar-nav li a {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .sidebar-nav li a i {
+      font-size: 1.1rem;
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+
+    .sidebar-nav li a:hover {
+      background: var(--neutral-light);
+      color: var(--primary-color);
+    }
+
+    .sidebar-nav li a:hover i {
+      transform: translateX(2px);
+    }
+
+    .sidebar-nav li a.active {
+      background: linear-gradient(135deg, #3b82f6 0%, var(--primary-color) 100%);
+      color: white;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    }
+
+    .sidebar-nav li a.active i {
+      color: white;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 20px 24px;
+      border-top: 1px solid var(--neutral-border);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── MAIN CONTENT AREA ── */
+    #main { 
+      margin-left: var(--sidebar-width); 
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      height: var(--topbar-height);
+      padding: 0 32px;
+      border-bottom: 1px solid var(--neutral-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 1020;
+    }
+
+    .topbar-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .topbar-title i { 
+      color: var(--primary-color); 
+      font-size: 1.2rem; 
+    }
+
+    .accuracy-pills {
+      display: flex;
+      gap: 8px;
+    }
+
+    .model-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--primary-light);
+      color: var(--primary-color);
+      border: 1px solid var(--primary-border);
+      border-radius: 50px;
+      padding: 6px 14px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      box-shadow: 0 2px 4px rgba(37, 99, 235, 0.04);
+    }
+
+    .model-pill.knn {
+      background: var(--success-light);
+      color: var(--success-color);
+      border-color: var(--success-border);
+    }
+
+    /* ── GLOBAL KONTEN ── */
+    .content { 
+      padding: 32px; 
+      flex-grow: 1;
+    }
+
+    /* ── PREMIUM CARDS ── */
+    .custom-card {
+      background: white;
+      border-radius: 16px;
+      border: 1px solid var(--neutral-border);
+      box-shadow: var(--card-shadow);
+      padding: 24px;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .custom-card:hover {
+      box-shadow: var(--card-shadow-hover);
+      transform: translateY(-2px);
+    }
+
+    .icon-shape {
+      width: 48px; 
+      height: 48px;
+      border-radius: 12px;
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      font-size: 1.3rem; 
+      margin-bottom: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+    }
+
+    .icon-shape.bg-primary-soft {
+      background-color: var(--primary-light);
+      color: var(--primary-color);
+    }
+
+    .icon-shape.bg-success-soft {
+      background-color: var(--success-light);
+      color: var(--success-color);
+    }
+
+    .icon-shape.bg-danger-soft {
+      background-color: var(--danger-light);
+      color: var(--danger-color);
+    }
+
+    .icon-shape.bg-warning-soft {
+      background-color: var(--warning-light);
+      color: #d97706;
+    }
+
+    /* ── BADGES ── */
+    .badge-soft {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge-soft-primary { background: var(--primary-light); color: var(--primary-color); border: 1px solid var(--primary-border); }
+    .badge-soft-success { background: var(--success-light); color: var(--success-color); border: 1px solid var(--success-border); }
+    .badge-soft-danger { background: var(--danger-light); color: var(--danger-color); border: 1px solid var(--danger-border); }
+    .badge-soft-warning { background: var(--warning-light); color: var(--warning-color); border: 1px solid var(--warning-border); }
+
+    /* ── TABLE ── */
+    .table-container {
+      background: white;
+      border-radius: 16px;
+      border: 1px solid var(--neutral-border);
+      overflow: hidden;
+      box-shadow: var(--card-shadow);
+    }
+
+    .table {
+      margin-bottom: 0;
+    }
+
+    .table thead th {
+      background: var(--neutral-light);
+      color: var(--text-main);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--neutral-border);
+      border-top: none;
+    }
+
+    .table tbody td {
+      font-size: 0.85rem;
+      vertical-align: middle;
+      padding: 16px 20px;
+      color: var(--text-main);
+      border-bottom: 1px solid var(--neutral-border);
+    }
+
+    .table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .table tbody tr {
+      transition: background 0.15s ease;
+    }
+
+    .table tbody tr:hover td { 
+      background: var(--neutral-light); 
+    }
+
+    /* ── BUTTONS ── */
+    .btn {
+      border-radius: 12px;
+      padding: 10px 20px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+    }
+
+    .btn-primary:hover, .btn-primary:focus {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+      box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .btn-success {
+      background: var(--success-color);
+      border-color: var(--success-color);
+      box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-success:hover, .btn-success:focus {
+      background: #059669;
+      border-color: #059669;
+      box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+      transform: translateY(-1px);
+    }
+
+    /* Mobile Toggle */
+    .mobile-nav-toggle {
+      display: none;
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 992px) {
+      .mobile-nav-toggle {
+        display: block;
+      }
+      
+      #sidebar { 
+        transform: translateX(-100%); 
+      }
+      
+      #sidebar.show {
+        transform: translateX(0);
+      }
+      
+      #main { 
+        margin-left: 0; 
+      }
+      
+      .topbar {
+        padding: 0 20px;
+      }
+      
+      .content {
+        padding: 20px;
+      }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">
+      <i class="bi bi-heart-pulse-fill"></i>
+    </div>
+    <div>
+      <div class="brand-name">Sentimen BPJS</div>
+      <div class="brand-sub">SVM & KNN · Tugas Akhir</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">Menu Utama</div>
+  <ul class="sidebar-nav">
+    <li>
+      <a href="/" class="{{ 'active' if request.path == '/' }}">
+        <i class="bi bi-grid-1x2"></i>
+        <span>Dashboard</span>
+      </a>
+    </li>
+    <li>
+      <a href="/prediksi" class="{{ 'active' if request.path == '/prediksi' }}">
+        <i class="bi bi-lightning-charge"></i>
+        <span>Prediksi</span>
+      </a>
+    </li>
+    <li>
+      <a href="/komentar" class="{{ 'active' if request.path == '/komentar' }}">
+        <i class="bi bi-database"></i>
+        <span>Dataset</span>
+      </a>
+    </li>
+    <li>
+      <a href="/riwayat" class="{{ 'active' if request.path == '/riwayat' }}">
+        <i class="bi bi-clock-history"></i>
+        <span>Riwayat Analisis</span>
+      </a>
+    </li>
+  </ul>
+
+  <div class="sidebar-footer">
+    <i class="bi bi-mortarboard-fill"></i>
+    <span>Politeknik Negeri Padang · 2026</span>
+  </div>
+</div>
+
+<!-- MAIN CONTAINER -->
+<div id="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <h6 class="topbar-title">
+      <button class="mobile-nav-toggle me-2" onclick="toggleSidebar()">
+        <i class="bi bi-list"></i>
+      </button>
+      <i class="bi bi-{% block topbar_icon %}grid-1x2{% endblock %}"></i>
+      <span>{% block topbar_title %}Dashboard{% endblock %}</span>
+    </h6>
+    <div class="accuracy-pills">
+      <span class="model-pill">
+        <i class="bi bi-cpu"></i> SVM 83.26%
+      </span>
+      <span class="model-pill knn">
+        <i class="bi bi-cpu"></i> KNN 77.09%
+      </span>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('show');
+  }
+
+  // Close sidebar on click outside when on mobile
+  document.addEventListener('click', function(event) {
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.querySelector('.mobile-nav-toggle');
+    if (window.innerWidth <= 992) {
+      if (!sidebar.contains(event.target) && event.target !== toggleBtn && !toggleBtn.contains(event.target)) {
+        sidebar.classList.remove('show');
+      }
+    }
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

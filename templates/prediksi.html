@@ -1,0 +1,685 @@
+{% extends 'base.html' %}
+
+{% block title %}Prediksi Sentimen - Analisis Sentimen BPJS{% endblock %}
+
+{% block head %}
+<style>
+  /* Kustomisasi gaya halaman prediksi */
+  .drop-zone {
+    border: 2px dashed var(--neutral-border);
+    border-radius: 16px;
+    padding: 40px 20px;
+    text-align: center;
+    background: var(--neutral-light);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--primary-color);
+    background: var(--primary-light);
+  }
+  .drop-zone i {
+    font-size: 3rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: inline-block;
+  }
+  .drop-zone.dragover i, .drop-zone:hover i {
+    color: var(--primary-color);
+    transform: scale(1.05);
+  }
+  .nav-tabs-custom {
+    border-bottom: 2px solid var(--neutral-border);
+    margin-bottom: 28px;
+  }
+  .nav-tabs-custom .nav-link {
+    border: none;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 12px 24px;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+  }
+  .nav-tabs-custom .nav-link.active {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+    background: transparent;
+  }
+  
+  .result-card-inner {
+    border: 1px solid var(--neutral-border);
+    border-radius: 14px;
+    padding: 20px;
+    background: var(--neutral-light);
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+  .result-card-inner:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  }
+  .confidence-progress {
+    height: 8px;
+    border-radius: 10px;
+    background-color: var(--neutral-border);
+    margin: 8px 0;
+  }
+</style>
+{% endblock %}
+
+{% block topbar_icon %}lightning-charge{% endblock %}
+{% block topbar_title %}Prediksi Klasifikasi Sentimen{% endblock %}
+
+{% block content %}
+<ul class="nav nav-tabs nav-tabs-custom" id="predictionTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-pane" type="button" role="tab">
+      <i class="bi bi-pencil-square me-2"></i>Prediksi Manual
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="csv-tab" data-bs-toggle="tab" data-bs-target="#csv-pane" type="button" role="tab">
+      <i class="bi bi-file-earmark-bar-graph me-2"></i>Upload CSV
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="predictionTabsContent">
+  <!-- PANE 1: PREDIKSI MANUAL -->
+  <div class="tab-pane fade show active" id="manual-pane" role="tabpanel">
+    <div class="row g-4">
+      <!-- Input Teks -->
+      <div class="col-lg-6">
+        <div class="custom-card d-flex flex-column justify-content-between h-100" style="min-height: 400px;">
+          <div>
+            <h5 class="fw-bold text-dark mb-2">Input Komentar Mentah</h5>
+            <p class="text-muted small mb-4">Tuliskan komentar masyarakat secara bebas tentang layanan BPJS Kesehatan. Sistem akan melakukan pembersihan teks dan klasifikasi secara real-time.</p>
+            <textarea id="txt-komentar" class="form-control px-3 py-3" rows="7" style="border-radius: 12px; resize: none;" placeholder="Contoh: Sangat terbantu dengan adanya aplikasi JKN Mobile. Antrean rumah sakit jadi lebih singkat dan efisien..."></textarea>
+          </div>
+          <div class="mt-4">
+            <button onclick="prosesPrediksiTeks()" class="btn btn-primary w-100 py-3 d-flex align-items-center justify-content-center gap-2">
+              <i class="bi bi-lightning-charge-fill"></i>
+              <span>Analisis Sentimen</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Hasil Analisis -->
+      <div class="col-lg-6">
+        <div class="custom-card d-flex align-items-center justify-content-center text-center h-100" id="output-manual-container" style="min-height: 400px;">
+          <div class="text-muted p-4">
+            <div class="mb-3">
+              <i class="bi bi-chat-dots" style="font-size: 3.5rem; color: #cbd5e1; display: inline-block;"></i>
+            </div>
+            <h6 class="fw-bold text-dark mb-1">Menunggu Input Komentar</h6>
+            <p class="small mb-0">Hasil analisis model SVM dan KNN serta tingkat keyakinan (confidence score) akan ditampilkan di sini.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANE 2: UPLOAD CSV -->
+  <div class="tab-pane fade" id="csv-pane" role="tabpanel">
+    <div class="row g-4">
+      <div class="col-12">
+        <div class="custom-card">
+          <h5 class="fw-bold text-dark mb-2">Massal Upload Dataset (.csv)</h5>
+          <p class="text-muted small mb-4">Unggah file CSV berisi banyak komentar. Sistem akan memproses baris demi baris menggunakan model SVM & KNN dan menyediakan ringkasan analisis statistik.</p>
+          
+          <div class="drop-zone" id="csv-drop-zone" onclick="document.getElementById('file-csv').click()">
+            <i class="bi bi-cloud-arrow-up-fill"></i>
+            <h6 class="fw-bold text-dark mb-1" id="drop-zone-text">Pilih file CSV atau seret ke sini</h6>
+            <p class="text-muted small mb-0">Ukuran file maksimal 5MB, format kolom teks otomatis dideteksi</p>
+            <input type="file" id="file-csv" class="d-none" accept=".csv" onchange="handleFileSelect(this)">
+          </div>
+          
+          <div class="d-flex justify-content-end mt-4">
+            <button onclick="prosesPrediksiCSV()" class="btn btn-success py-2.5 px-4 d-flex align-items-center gap-2">
+              <i class="bi bi-play-circle-fill"></i>
+              <span>Mulai Proses Analisis CSV</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Hasil Upload CSV (Metrik & Tabel) -->
+      <div class="col-12" id="output-csv-container" style="display: none;">
+        <!-- Card Ringkasan Statistik CSV -->
+        <div class="custom-card mb-4">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 pb-3 border-bottom">
+            <div>
+              <h5 class="fw-bold text-dark mb-1">Hasil Ringkasan Analisis Batch</h5>
+              <p class="text-muted small mb-0">Rekapitulasi statistik prediksi model SVM dan KNN dari berkas CSV.</p>
+            </div>
+            <button id="btn-download-csv" class="btn btn-success d-flex align-items-center gap-2">
+              <i class="bi bi-file-earmark-arrow-down-fill"></i>
+              <span>Download Hasil Analisis</span>
+            </button>
+          </div>
+          
+          <div class="row g-3">
+            <div class="col-md-4 col-lg-2">
+              <div class="p-3 border rounded-3 text-center bg-light">
+                <span class="text-muted small fw-semibold">Jumlah Data</span>
+                <h4 class="fw-bold mt-1 mb-0 text-dark" id="csv-total">-</h4>
+              </div>
+            </div>
+            <div class="col-md-4 col-lg-2">
+              <div class="p-3 border rounded-3 text-center bg-light">
+                <span class="text-muted small fw-semibold">Positif (SVM)</span>
+                <h4 class="fw-bold mt-1 mb-0 text-success" id="csv-pos-svm">-</h4>
+              </div>
+            </div>
+            <div class="col-md-4 col-lg-2">
+              <div class="p-3 border rounded-3 text-center bg-light">
+                <span class="text-muted small fw-semibold">Negatif (SVM)</span>
+                <h4 class="fw-bold mt-1 mb-0 text-danger" id="csv-neg-svm">-</h4>
+              </div>
+            </div>
+            <div class="col-md-4 col-lg-2">
+              <div class="p-3 border rounded-3 text-center bg-light">
+                <span class="text-muted small fw-semibold">Positif (KNN)</span>
+                <h4 class="fw-bold mt-1 mb-0 text-success" id="csv-pos-knn">-</h4>
+              </div>
+            </div>
+            <div class="col-md-4 col-lg-2">
+              <div class="p-3 border rounded-3 text-center bg-light">
+                <span class="text-muted small fw-semibold">Negatif (KNN)</span>
+                <h4 class="fw-bold mt-1 mb-0 text-danger" id="csv-neg-knn">-</h4>
+              </div>
+            </div>
+            <div class="col-md-4 col-lg-2">
+              <div class="p-3 border rounded-3 text-center bg-light">
+                <span class="text-muted small fw-semibold">Prediksi Sama</span>
+                <h4 class="fw-bold mt-1 mb-0 text-primary" id="csv-sama">-</h4>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabel Detail -->
+        <div class="table-container">
+          <div class="px-4 py-3 border-bottom d-flex justify-content-between align-items-center bg-light">
+            <h6 class="fw-bold text-dark mb-0">Rincian Data Prediksi (Maks. 50 Data Pertama)</h6>
+            <span class="badge-soft badge-soft-primary" id="csv-tabel-title">Detail</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead>
+                <tr>
+                  <th style="width: 5%">No</th>
+                  <th style="width: 55%">Komentar</th>
+                  <th style="width: 17%">Prediksi SVM</th>
+                  <th style="width: 17%">Prediksi KNN</th>
+                  <th style="width: 6%" class="text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody id="csv-table-body">
+                <!-- Data loaded dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Drag and Drop files handling
+  const dropZone = document.getElementById('csv-drop-zone');
+  const fileInput = document.getElementById('file-csv');
+  const dropZoneText = document.getElementById('drop-zone-text');
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, e => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+    }, false);
+  });
+
+  dropZone.addEventListener('drop', e => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length) {
+      fileInput.files = files;
+      handleFileSelect(fileInput);
+    }
+  });
+
+  function handleFileSelect(input) {
+    if (input.files.length > 0) {
+      dropZoneText.innerText = `File Terpilih: ${input.files[0].name}`;
+      dropZone.style.borderColor = 'var(--primary-color)';
+    }
+  }
+
+  // 1. Prediksi Manual
+  function prosesPrediksiTeks() {
+    const teks = document.getElementById('txt-komentar').value.trim();
+    const outputBox = document.getElementById('output-manual-container');
+
+    if(!teks) {
+      alert("Silakan tulis komentar terlebih dahulu!");
+      return;
+    }
+
+    // Tampilkan Loading
+    outputBox.innerHTML = `
+      <div class="w-100 text-center py-5">
+        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+        <h6 class="fw-bold text-dark mb-1">Sedang Mengklasifikasi...</h6>
+        <p class="text-muted small mb-0">Model SVM dan KNN sedang menghitung bobot kata.</p>
+      </div>
+    `;
+
+    fetch('/api/prediksi_teks', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ teks: teks })
+    })
+    .then(res => res.json())
+    .then(res => {
+      if(res.status === 'success') {
+        const isPosSvm = res.svm === 'Positif';
+        const isPosKnn = res.knn === 'Positif';
+        
+        const badgeSvm = isPosSvm ? 'badge-soft-success' : 'badge-soft-danger';
+        const badgeKnn = isPosKnn ? 'badge-soft-success' : 'badge-soft-danger';
+        
+        const iconSvm = isPosSvm ? 'bi-hand-thumbs-up-fill' : 'bi-hand-thumbs-down-fill';
+        const iconKnn = isPosKnn ? 'bi-hand-thumbs-up-fill' : 'bi-hand-thumbs-down-fill';
+        
+        // Progress bar colors
+        const progressSvmColor = isPosSvm ? 'bg-success' : 'bg-danger';
+        const progressKnnColor = isPosKnn ? 'bg-success' : 'bg-danger';
+
+        // Dynamic Main Result Icon based on SVM (or consensus)
+        let mainSentimentIcon = '';
+        if (res.sepakat) {
+          mainSentimentIcon = isPosSvm 
+            ? `<div class="mb-3"><i class="bi bi-emoji-smile-fill text-success" style="font-size: 3.5rem;"></i></div>`
+            : `<div class="mb-3"><i class="bi bi-emoji-frown-fill text-danger" style="font-size: 3.5rem;"></i></div>`;
+        } else {
+          mainSentimentIcon = `<div class="mb-3"><i class="bi bi-emoji-neutral-fill text-warning" style="font-size: 3.5rem;"></i></div>`;
+        }
+
+        const infoAlert = res.sepakat 
+          ? `<div class="alert alert-success d-flex align-items-center gap-2 mb-0 py-2.5" style="border-radius: 12px; border: none; background-color: var(--success-light); color: var(--success-text);">
+               <i class="bi bi-check-circle-fill"></i>
+               <span class="small fw-semibold">Kedua model memberikan prediksi yang sama.</span>
+             </div>`
+          : `<div class="alert alert-warning d-flex align-items-center gap-2 mb-0 py-2.5" style="border-radius: 12px; border: none; background-color: var(--warning-light); color: var(--warning-text);">
+               <i class="bi bi-exclamation-triangle-fill"></i>
+               <span class="small fw-semibold">Hasil kedua model berbeda.</span>
+             </div>`;
+
+        // Function to get recommendation advice based on model output and comment text keywords
+        function getSaranTindakan(sentimen, teks) {
+          const t = teks.toLowerCase();
+          
+          // 1. Aspek Antrean / Waktu Tunggu
+          if (t.includes('antre') || t.includes('antri') || t.includes('lama') || t.includes('tunggu') || t.includes('jam')) {
+            if (sentimen === 'Positif') {
+              return 'Pertahankan efisiensi alur pelayanan. Teruskan integrasi pendaftaran mandiri agar waktu tunggu tetap singkat.';
+            } else {
+              return 'Optimalkan manajemen antrean rumah sakit. Maksimalkan pendaftaran online via Mobile JKN dan tinjau kapasitas loket pendaftaran.';
+            }
+          }
+          
+          // 2. Aspek Petugas / Keramahan
+          if (t.includes('ramah') || t.includes('petugas') || t.includes('dokter') || t.includes('perawat') || t.includes('staf') || t.includes('suster') || t.includes('pelayan') || t.includes('admin')) {
+            if (sentimen === 'Positif') {
+              return 'Apresiasi keramahan petugas loket/medis. Berikan penghargaan berkala kepada staf untuk mempertahankan budaya pelayanan prima.';
+            } else {
+              return 'Segera lakukan evaluasi sikap petugas di bagian loket/pendaftaran. Jadwalkan pelatihan keramahan secara berkala untuk staf.';
+            }
+          }
+          
+          // 3. Aspek Obat / Apotek
+          if (t.includes('obat') || t.includes('resep') || t.includes('apotek') || t.includes('farmasi') || t.includes('kosong')) {
+            if (sentimen === 'Positif') {
+              return 'Kecepatan pelayanan obat sudah baik. Pertahankan koordinasi rantai pasokan obat agar tidak terjadi kekosongan stok.';
+            } else {
+              return 'Tinjau ketersediaan obat di apotek faskes mitra. Lakukan evaluasi agar pasien tidak perlu mengantre obat terlalu lama.';
+            }
+          }
+          
+          // 4. Aspek Aplikasi / Sistem Online
+          if (t.includes('aplikasi') || t.includes('jkn') || t.includes('mobile') || t.includes('sistem') || t.includes('online') || t.includes('error') || t.includes('server')) {
+            if (sentimen === 'Positif') {
+              return 'Pemanfaatan Mobile JKN dinilai sangat membantu. Teruskan sosialisasi fitur-fitur baru aplikasi ke seluruh lapisan masyarakat.';
+            } else {
+              return 'Lakukan optimalisasi infrastruktur server Mobile JKN guna meminimalkan kegagalan sistem saat pendaftaran antrean online.';
+            }
+          }
+          
+          // 5. Umum (Fallback)
+          if (sentimen === 'Positif') {
+            return 'Layanan dinilai memuaskan. Pertahankan kualitas pelayanan dan terus lakukan monitoring berkala untuk menjaga kepuasan pengguna.';
+          } else {
+            return 'Lakukan audit mutu pelayanan kesehatan mitra BPJS. Identifikasi area keluhan utama pasien untuk tindakan perbaikan SOP.';
+          }
+        }
+
+        outputBox.innerHTML = `
+          <div class="w-100 text-start">
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+              <h6 class="fw-bold text-dark mb-0"><i class="bi bi-bar-chart-steps me-2 text-primary"></i>Hasil Analisis Sentimen</h6>
+              <span class="badge-soft ${res.sepakat ? 'badge-soft-success' : 'badge-soft-warning'}">
+                ${res.sepakat ? 'Sama' : 'Berbeda'}
+              </span>
+            </div>
+            
+            <p class="text-secondary bg-light px-3 py-2.5 rounded-3 mb-4" style="font-size: 0.85rem; font-style: italic; border-left: 4px solid var(--primary-color);">
+              "${res.teks}"
+            </p>
+            
+            <div class="row g-3 mb-4">
+              <!-- Hasil SVM -->
+              <div class="col-6">
+                <div class="result-card-inner h-100 d-flex flex-column justify-content-between">
+                  <div>
+                    <div class="small fw-bold text-muted mb-2">Model SVM</div>
+                    <span class="badge-soft ${badgeSvm} mb-3" style="font-size: 0.85rem; display: inline-block;">
+                      <i class="bi ${iconSvm}"></i> ${res.svm}
+                    </span>
+                    <div class="text-start mt-2">
+                      <div class="d-flex justify-content-between small text-muted">
+                        <span>Confidence</span>
+                        <span class="fw-bold">${res.conf_svm}%</span>
+                      </div>
+                      <div class="progress confidence-progress mb-2">
+                        <div class="progress-bar ${progressSvmColor}" role="progressbar" style="width: ${res.conf_svm}%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-3 border-top pt-2 text-start">
+                    <span class="text-secondary fw-bold" style="font-size: 10px; display: block; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b !important;">Rekomendasi Tindakan:</span>
+                    <p class="text-dark mb-0 mt-1" style="font-size: 11px; line-height: 1.4; font-weight: 500;">
+                      ${getSaranTindakan(res.svm, res.teks)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Hasil KNN -->
+              <div class="col-6">
+                <div class="result-card-inner h-100 d-flex flex-column justify-content-between">
+                  <div>
+                    <div class="small fw-bold text-muted mb-2">Model KNN</div>
+                    <span class="badge-soft ${badgeKnn} mb-3" style="font-size: 0.85rem; display: inline-block;">
+                      <i class="bi ${iconKnn}"></i> ${res.knn}
+                    </span>
+                    <div class="text-start mt-2">
+                      <div class="d-flex justify-content-between small text-muted">
+                        <span>Confidence</span>
+                        <span class="fw-bold">${res.conf_knn}%</span>
+                      </div>
+                      <div class="progress confidence-progress mb-2">
+                        <div class="progress-bar ${progressKnnColor}" role="progressbar" style="width: ${res.conf_knn}%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-3 border-top pt-2 text-start">
+                    <span class="text-secondary fw-bold" style="font-size: 10px; display: block; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b !important;">Rekomendasi Tindakan:</span>
+                    <p class="text-dark mb-0 mt-1" style="font-size: 11px; line-height: 1.4; font-weight: 500;">
+                      ${getSaranTindakan(res.knn, res.teks)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mb-3">
+              ${infoAlert}
+            </div>
+
+            <!-- Perbandingan & Rekomendasi Model Terbaik -->
+            <div class="mt-4 border-top pt-3 text-start">
+              <h6 class="fw-bold text-dark mb-2"><i class="bi bi-award-fill text-warning me-2"></i>Rekomendasi Model Terbaik</h6>
+              <div class="p-3 rounded bg-light border border-primary-light d-flex align-items-center justify-content-between flex-wrap gap-2" style="border-radius: 12px !important;">
+                <div>
+                  <span class="fw-bold text-primary" style="font-size: 13px;">Support Vector Machine (SVM)</span>
+                  <p class="text-muted mb-0 small" style="font-size: 11px; line-height: 1.4;">Akurasi SVM (83.26%) lebih tinggi dibandingkan KNN (77.09%).</p>
+                </div>
+                <div class="text-end">
+                  <span class="badge bg-primary text-white py-2 px-3" style="font-size: 11px; border-radius: 8px;">
+                    Prediksi Akhir: <strong>${res.svm}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        alert("Gagal melakukan prediksi: " + res.pesan);
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Terjadi kesalahan sistem saat memproses prediksi.");
+    });
+  }
+
+  // 2. Prediksi CSV
+  let cacheCSVHasil = null;
+  let cacheCSVKolom = "";
+
+  function prosesPrediksiCSV() {
+    const outputContainer = document.getElementById('output-csv-container');
+
+    if(fileInput.files.length === 0) {
+      alert("Silakan unggah berkas CSV terlebih dahulu!");
+      return;
+    }
+
+    // Tampilkan loading screen di container hasil
+    outputContainer.style.display = 'block';
+    outputContainer.innerHTML = `
+      <div class="custom-card text-center py-5">
+        <div class="spinner-border text-success mb-3" role="status" style="width: 3.5rem; height: 3.5rem;"></div>
+        <h6 class="fw-bold text-dark mb-1">Memproses Dataset CSV...</h6>
+        <p class="text-muted small mb-0">Sedang memproses preprocessing, klasifikasi SVM & KNN secara massal...</p>
+      </div>
+    `;
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+
+    fetch('/api/prediksi_csv', { method: 'POST', body: formData })
+    .then(res => res.json())
+    .then(res => {
+      if(res.status === 'success') {
+        cacheCSVHasil = res.hasil;
+        cacheCSVKolom = res.kolom;
+        
+        // Hitung statistik rekapitulasi secara dinamis
+        const total = res.hasil.length;
+        const posSvm = res.hasil.filter(x => x.Prediksi_SVM === 'Positif').length;
+        const negSvm = total - posSvm;
+        const posKnn = res.hasil.filter(x => x.Prediksi_KNN === 'Positif').length;
+        const negKnn = total - posKnn;
+        const sama = res.hasil.filter(x => x.Sepakat).length;
+
+        // Render template stat card dan tabel
+        renderHasilCSV(total, posSvm, negSvm, posKnn, negKnn, sama, res.hasil, res.kolom);
+      } else {
+        outputContainer.innerHTML = `
+          <div class="custom-card text-center py-5 border-danger bg-danger-light">
+            <i class="bi bi-x-circle-fill text-danger mb-3" style="font-size: 3rem; display:inline-block;"></i>
+            <h6 class="fw-bold text-danger mb-1">Gagal Memproses File</h6>
+            <p class="text-secondary small mb-0">${res.pesan || 'Pastikan file CSV memiliki kolom teks yang valid.'}</p>
+          </div>
+        `;
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      outputContainer.innerHTML = `
+        <div class="custom-card text-center py-5 border-danger bg-danger-light">
+          <i class="bi bi-x-circle-fill text-danger mb-3" style="font-size: 3rem; display:inline-block;"></i>
+          <h6 class="fw-bold text-danger mb-1">Kesalahan Koneksi Server</h6>
+          <p class="text-secondary small mb-0">Gagal mengunggah dataset ke server backend.</p>
+        </div>
+      `;
+    });
+  }
+
+  function renderHasilCSV(total, posSvm, negSvm, posKnn, negKnn, sama, hasil, kolom) {
+    const outputContainer = document.getElementById('output-csv-container');
+    
+    let tableRows = hasil.map((item, index) => {
+      const bSvm = item.Prediksi_SVM === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+      const bKnn = item.Prediksi_KNN === 'Positif' ? 'badge-soft-success' : 'badge-soft-danger';
+      
+      const iconSvm = item.Prediksi_SVM === 'Positif' ? 'bi-hand-thumbs-up-fill' : 'bi-hand-thumbs-down-fill';
+      const iconKnn = item.Prediksi_KNN === 'Positif' ? 'bi-hand-thumbs-up-fill' : 'bi-hand-thumbs-down-fill';
+
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td>
+            <div class="text-truncate" style="max-width: 500px;" title="${item[kolom]}">
+              ${item[kolom]}
+            </div>
+          </td>
+          <td>
+            <span class="badge-soft ${bSvm}">
+              <i class="bi ${iconSvm}"></i> ${item.Prediksi_SVM}
+            </span>
+            <div class="small text-muted mt-1" style="font-size: 11px;">Confidence: ${item.Conf_SVM_Pct}%</div>
+          </td>
+          <td>
+            <span class="badge-soft ${bKnn}">
+              <i class="bi ${iconKnn}"></i> ${item.Prediksi_KNN}
+            </span>
+            <div class="small text-muted mt-1" style="font-size: 11px;">Confidence: ${item.Conf_KNN_Pct}%</div>
+          </td>
+          <td class="text-center">
+            ${item.Sepakat 
+              ? `<span class="badge-soft badge-soft-success"><i class="bi bi-check-circle"></i> Sama</span>` 
+              : `<span class="badge-soft badge-soft-warning"><i class="bi bi-exclamation-triangle"></i> Beda</span>`}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    outputContainer.innerHTML = `
+      <!-- Card Statistik -->
+      <div class="custom-card mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 pb-3 border-bottom">
+          <div>
+            <h5 class="fw-bold text-dark mb-1"><i class="bi bi-bar-chart-steps text-primary me-2"></i>Hasil Analisis Batch CSV</h5>
+            <p class="text-muted small mb-0">Rangkuman hasil klasifikasi sentimen seluruh data dari file CSV.</p>
+          </div>
+          <button onclick="downloadCSVHasil()" class="btn btn-success d-flex align-items-center gap-2">
+            <i class="bi bi-file-earmark-arrow-down-fill"></i>
+            <span>Download Hasil Analisis</span>
+          </button>
+        </div>
+        
+        <div class="row g-3">
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <span class="text-muted small fw-semibold d-block mb-1">Jumlah Data</span>
+              <h4 class="fw-bold mb-0 text-dark">${total}</h4>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <span class="text-muted small fw-semibold d-block mb-1">Positif (SVM)</span>
+              <h4 class="fw-bold mb-0 text-success">${posSvm}</h4>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <span class="text-muted small fw-semibold d-block mb-1">Negatif (SVM)</span>
+              <h4 class="fw-bold mb-0 text-danger">${negSvm}</h4>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <span class="text-muted small fw-semibold d-block mb-1">Positif (KNN)</span>
+              <h4 class="fw-bold mb-0 text-success">${posKnn}</h4>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <span class="text-muted small fw-semibold d-block mb-1">Negatif (KNN)</span>
+              <h4 class="fw-bold mb-0 text-danger">${negKnn}</h4>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="p-3 border rounded-3 text-center bg-light">
+              <span class="text-muted small fw-semibold d-block mb-1">Prediksi Sama</span>
+              <h4 class="fw-bold mb-0 text-primary">${sama}</h4>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabel Rincian Data -->
+      <div class="table-container">
+        <div class="px-4 py-3 border-bottom d-flex justify-content-between align-items-center bg-light">
+          <h6 class="fw-bold text-dark mb-0">Rincian Data Hasil Prediksi (Maksimal 50 Data Pertama)</h6>
+          <span class="badge-soft badge-soft-primary">Dataset CSV</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th style="width: 5%">No</th>
+                <th style="width: 55%">Komentar</th>
+                <th style="width: 17%">Prediksi SVM</th>
+                <th style="width: 17%">Prediksi KNN</th>
+                <th style="width: 6%" class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  // Download CSV client-side
+  function downloadCSVHasil() {
+    if (!cacheCSVHasil || cacheCSVHasil.length === 0) {
+      alert("Tidak ada data hasil untuk diunduh!");
+      return;
+    }
+    
+    let csvContent = "\uFEFF"; // Add BOM to support Excel opening Indonesian accents
+    csvContent += `No,${cacheCSVKolom},Prediksi_SVM,Conf_SVM_Pct,Prediksi_KNN,Conf_KNN_Pct,Sepakat\n`;
+    
+    cacheCSVHasil.forEach((row, index) => {
+      // Escape double quotes inside text
+      const cleanComment = row[cacheCSVKolom] ? row[cacheCSVKolom].toString().replace(/"/g, '""') : '';
+      csvContent += `${index + 1},"${cleanComment}",${row.Prediksi_SVM},${row.Conf_SVM_Pct}%,${row.Prediksi_KNN},${row.Conf_KNN_Pct}%,${row.Sepakat ? 'Sama' : 'Beda'}\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `hasil_analisis_sentimen_${fileInput.files[0].name}`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+</script>
+{% endblock %}
